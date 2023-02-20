@@ -10,6 +10,7 @@ import itertools
 import scipy.stats as stats
 import numpy as np
 from datetime import datetime
+import warnings
 
 #---------------------- PARSING ARGUMENTS ---------------------------------------------
 
@@ -81,6 +82,7 @@ if len(CSC)==0:
         raise ValueError("No Complete Single-copy tree has ben found.")
 print ('Parsed:\n' + str(len(otus_set)) + ' species\n' + str(count) + ' trees\n\n\tSingle-copy\tMulti-copy\nComplete\t'+ str(len(CSC)) + '\t' + str(len(CMC)) + '\nPartial\t' + str(len(PSC)) + '\t' + str(len(PMC)))
 
+
 ## CSC trees analysis and candidate root partitions identification
 
 # Terminal names are set to the order in the first CSC provided tree
@@ -125,9 +127,9 @@ a = a.rename(columns={"index":"Part_id"})
 a['Part_id'] = a.index + 1
 print ('\nCandidate root partition counts among Complete Single-Copy trees:\n')
 print (a[['Part_id', 'Voted_root', 'MAD_root']])
-print ('\nVoted_root: number of CSC trees where this was the best root partition\nMAD_root: percentage of CSC trees where this was the best root partition\n')
+print ('\nVoted_root: number of CSC trees where the current partition was the root partition\nMAD_root: percentage of CSC trees where the current partition was the root partition\n')
 a = a.drop(['Voted_root', 'MAD_root'], axis=1)
-b  = csc_root_candidates.merge(a, on=['Partition_id'], how = 'left').drop_duplicates(subset=['Tree', 'Partition_id'])
+b  = csc_root_candidates.merge(a, on=['Partition_id'], how = 'right').drop_duplicates(subset=['Tree', 'Partition_id'])
 b = b.drop(['Partition_id', 'Voted_root', 'MAD_root', 'Counts', 'consensus'],axis=1)
 b = b.rename(columns={'Part_id': 'Partition_id'})
 part_dict = dict(zip(b.Partition, b.Partition_id))
@@ -175,10 +177,13 @@ for tree_id in CMC:
 				append_partition(diction, clade, tree_id, part_dict, bitstr2, 'CMC', AD)
 			elif bitstrcomp in part_dict:
 				append_partition(diction, clade, tree_id, part_dict, bitstrcomp, 'CMC', AD)
+
 print ('\nCMC complete...')
+
 
 ## PSC trees analysis
 
+uninf = {}
 for tree_id in PSC:
 	tree = treeclas[tree_id][1]
 	ADs_pertree[tree_id] = []
@@ -198,7 +203,11 @@ for tree_id in PSC:
 				append_partition(diction, clade, tree_id, part_dict, each, 'PSC', AD)
 			elif (bitstr2 == reduced_bits or bitstrcomp == reduced_bits) and len(set(list(reduced_bits))) == 1:
 				append_partition(diction, clade, tree_id, part_dict, each, 'PSC')
-print ('\nPSC complete...')
+				if not tree in uninf:
+					uninf[tree] = ['PSC', list()]
+				uninf[tree][1].append(part_dict[each])
+uninf_PSC = len([x for x in uninf.keys() if len(uninf[x][1]) == len(root_candidates)])
+print ('\nPSC complete... ' + str(uninf_PSC) + ' PSC trees are globally uninformative')
 
 ## PMC trees analysis
 
@@ -217,7 +226,6 @@ for tree_id in PMC:
 			dupl[names_new[i]].append(bitstr[i])
 		dupl_splits = [len(set(x)) for x in dupl.values()]
 		if len(set(dupl_splits)) == 1:
-                #then, remove duplicate
 			names_new_clean = []
 			bitstr_clean = []
 			for e, f in zip(names_new, bitstr):
@@ -235,81 +243,92 @@ for tree_id in PMC:
 					append_partition(diction, clade, tree_id, part_dict, each, 'PMC', AD)
 				elif (bitstr2 == reduced_bits or bitstrcomp == reduced_bits) and len(set(list(reduced_bits))) == 1:
 					append_partition(diction, clade, tree_id, part_dict, each, 'PMC')
-print ('\nPMC complete...')
+					if not tree in uninf:
+                                        	uninf[tree] = ['PMC', list()]
+					uninf[tree][1].append(part_dict[each])
+
+uninf_PMC = len([x for x in uninf.keys() if uninf[x][0] == 'PMC' and len(uninf[x][1]) == len(root_candidates)])
+print ('\nPMC complete... ' + str(uninf_PMC) + ' PMC trees are globally uninformative')
 
 ## Filling informative tree partitions with maxAD
 
+
+diff = set(treeclas.keys()) - set(diction['Tree'])
+for tree in diff:
+	append_partition(diction, clade, tree, part_dict, each,treeclas[tree][2], np.nan)
 ADmax = {key:max(value) for (key, value) in ADs_pertree.items()}
 df = pd.DataFrame(data = diction)
 df_unstack = pd.DataFrame(df.groupby(['Tree','Partition_id']).AD.first().unstack())
 df_unstack = df_unstack.reset_index()
 df_melt = pd.melt(df_unstack, id_vars='Tree', value_vars=list(df_unstack.columns[1:]), var_name= 'Partition_id', value_name='AD')
+df_worst = df_melt.copy()
 df_melt.AD = df_melt.AD.fillna(df_melt.Tree.map(ADmax))
-df_melt.AD = pd.to_numeric(df_melt.AD, errors='coerce') 
+df_melt.AD = pd.to_numeric(df_melt.AD, errors='coerce')
 df_ready = df_melt.merge(df[['GeneFam', 'Tree']], on=['Tree'], how = 'left').drop_duplicates(subset=['Tree', 'Partition_id'])
 df_ready.to_csv(args.AD, index=False, na_rep='nan')
 print ('\nADs and partitions stored in ' + args.AD + ' and ' + args.p )
 
 ## Root neighborhood
 
-#df.to_csv('nonmaxAD_' +  args.AD, index=False, na_rep='nan')
 if args.neighborhood == True:
 	print ('\nProceeding with root neighborhood inference...\n')
 else:
 	print ('\n**COMPLETED**\nRuntime: ' + str(datetime.now() - start_time))
 	exit()
+
 # Convert df back into dictionaries
 
-df_ready = df_ready.dropna()
 dict_all = {k: f.groupby('Tree')['AD'].apply(float).to_dict() for k, f in df_ready.groupby('Partition_id')}
-df_worst = df[(df['AD'] != 'Non-Inf')]
+df_worst.AD = pd.to_numeric(df_worst.AD, errors='coerce')
 dict_worst = {k: f.groupby('Partition_id')['AD'].apply(float).to_dict() for k, f in df_worst.groupby('Tree')}
+dict_worst_all = {k: f.groupby('Partition_id')['AD'].apply(float).to_dict() for k, f in df_ready.groupby('Tree')}
+
+
+# Iterations
 
 initial = len(dict_all)
 iter = 1
 tests = 0
 print ('Iteration\tRejected partition\tFDR-pvalue\t#trees')
+warnings.filterwarnings('ignore')
+pval_global = []
 while len(dict_all)>1 and (initial > len(dict_all) or iter == 1):
 	initial = len(dict_all)
 	pvalues = {}
-	for part in list(dict_all):
-		part_AD = list()
-		worst_AD = list()
-		for tree in dict_all[part]:
-			if tree in dict_worst:
-				subdict = dict_worst[tree]
-				values = [subdict[p] for p in subdict if p != part]
-				if len(values) > 0:
-					part_AD.append(dict_all[part][tree])
-					worst_AD.append(max(values))
-		substracted = [x-y for x,y in zip(part_AD,worst_AD)]
+	parts = sorted(list(dict_all.keys()))
+	for part in parts:
+		part_AD = [dict_all[part][tree] for tree in treeclas]
+		worst_AD = [np.nanmax([(v) for k,v in d.items() if k != part]) for d in [dict_worst[tree] for tree in treeclas]]
+		for i in range(0, len(worst_AD)):
+			if np.isnan(worst_AD[i]) == True:
+				tree = i+1
+				subdict = [dict_worst_all[tree][p] for p in dict_worst_all[tree] if p!= part]
+				worst_AD[i] = np.nanmax(subdict)
+		substracted = [x-y for x,y in zip(part_AD,worst_AD) if np.isnan(x) == False and np.isnan(y) == False]
 		if len(substracted) >=11:
-			wilcox = stats.wilcoxon(substracted,alternative='greater', nan_policy='omit')
+			wilcox = stats.wilcoxon(substracted,alternative='greater')
 			pvalues[part] = [wilcox.pvalue, '', len(substracted)]
-	pvals = [x[0] for x in pvalues.values()]
-	pvals.sort()
-	ranks = range(1, len(pvals)+1)
-	tests += len(pvals)
-	for i in range(0,len(pvals)):
+
+	pvals = [pvalues[p][0] for p in parts] + pval_global
+	sort_index = np.argsort(pvals)
+	ranks = [x + 1 for x in sort_index]
+	tests = len(pvals)
+	for i in range(0, len(parts)):
 		p = pvals[i]
 		rank = ranks[i]
 		fdr_pval = p*tests/rank
-		for key in pvalues:
-			if pvalues[key][0] == p and pvalues[key][1] == '':
-				pvalues[key][1] = fdr_pval
-	fdr_sorted = [x[1] for x in pvalues.values()]
-	mini = min(fdr_sorted)
-	rej = ''
-	for key in pvalues:
-		if pvalues[key][1] == mini:
-			rej = key
-	print (str(iter) + '\t' + str(rej) + '\t' + str(pvalues[rej][1]) + '\t' + str(pvalues[rej][2]))
-	if mini <= 0.05:
-		del dict_all[rej]
+		pvalues[parts[i]][1] = fdr_pval
+	fdr_sorted = [pvalues[p][1] for p in parts]
+	minp = parts[np.argmin(fdr_sorted)]
+	minfdr = min(fdr_sorted)
+	if minfdr <= 0.05:
+		print (str(iter) + '\t' + str(minp) + '\t' + str(pvalues[minp][1]) + '\t' + str(pvalues[minp][2]))
+		del dict_all[minp]		
 		for tree in dict_worst:
-			if rej in dict_worst[tree]:
-				del dict_worst[tree][rej]
+			del dict_worst[tree][minp]
+			del dict_worst_all[tree][minp]
 	iter += 1
-
+	pval_global += pvals
 print ('\nRetained partition(s): ' + str(list(dict_all.keys())))
 print ('\n**COMPLETED**\nRuntime: ' + str(datetime.now() - start_time))
+
