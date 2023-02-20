@@ -288,7 +288,6 @@ dict_worst_all = {k: f.groupby('Partition_id')['AD'].apply(float).to_dict() for 
 
 initial = len(dict_all)
 iter = 1
-tests = 0
 print ('Iteration\tRejected partition\tFDR-pvalue\t#trees')
 warnings.filterwarnings('ignore')
 pval_global = []
