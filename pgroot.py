@@ -127,7 +127,7 @@ a = a.rename(columns={"index":"Part_id"})
 a['Part_id'] = a.index + 1
 print ('\nCandidate root partition counts among Complete Single-Copy trees:\n')
 print (a[['Part_id', 'Voted_root', 'MAD_root']])
-print ('\nVoted_root: number of CSC trees where the current partition was the root partition\nMAD_root: percentage of CSC trees where the current partition was the root partition\n')
+print ('\nVoted_root: number of CSC trees where the current partition is the root partition\nMAD_root: percentage of CSC trees where the current partition is the root partition\n')
 a = a.drop(['Voted_root', 'MAD_root'], axis=1)
 b  = csc_root_candidates.merge(a, on=['Partition_id'], how = 'right').drop_duplicates(subset=['Tree', 'Partition_id'])
 b = b.drop(['Partition_id', 'Voted_root', 'MAD_root', 'Counts', 'consensus'],axis=1)
