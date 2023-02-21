@@ -32,3 +32,5 @@ If the flag `--neighborhood` is used, the inference of a root neighborhood will 
 Additionally, the data sets used in the study can be found here. The analysis for the proteobacteria dataset can be run as follows:
 
 `pgroot.py -t Proteobacteria.nwk.AD_unrooted -AD Proteobacteria.df -p Proteobacteria_part.mat --neighborhood`
+
+An R script is also provided, which can be used to replicate some of the figues in the manuscript. 
