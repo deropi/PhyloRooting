@@ -65,6 +65,8 @@ for tree in trees:
 	count += 1
 	termi = tree.get_terminals()
 	names = [x.name.split('_')[0] for x in termi]
+	if not [len(x.name.split('_')) for x in termi].count(2) == len(names):
+		raise ValueError("OTU names must have two components: X_1. Where X is the species id and the number after '_' represents the copy number.")
 	treeclas[count] = [names, tree, str()]
 	otus +=names
 otus_set = set(otus)
@@ -86,15 +88,13 @@ print ('Parsed:\n' + str(len(otus_set)) + ' species\n' + str(count) + ' trees\n\
 ## CSC trees analysis and candidate root partitions identification
 
 # Terminal names are set to the order in the first CSC provided tree
-name_order = trees[CSC[0]].get_terminals()
-names = [x.name.split('_')[0] for x in name_order]
-if not [len(x.name.split('_')) for x in name_order].count(2) == len(names):
-	raise ValueError("OTU names must have two components: X_1. Where X is the species id and the number after '_' represents the copy number.")
+
+names = treeclas[CSC[0]][0]
 ADs_pertree = {}
 diction_csc = {'Tree':[], 'Partition':[], 'Partition_id':[], 'AD':[], 'GeneFam':[]}
 part_dict = {}
 for tree_id in CSC:
-	tree = treeclas[tree_id][1] 
+	tree = treeclas[tree_id][1]
 	ADs_pertree[tree_id] = []
 	names_new, clade_bitstrs = get_bitstrings(tree)
 	index = [names_new.index(i) for i in names] #position in names_new which corresponds to original order
@@ -127,7 +127,7 @@ a = a.rename(columns={"index":"Part_id"})
 a['Part_id'] = a.index + 1
 print ('\nCandidate root partition counts among Complete Single-Copy trees:\n')
 print (a[['Part_id', 'Voted_root', 'MAD_root']])
-print ('\nVoted_root: number of CSC trees where the current partition is the root partition\nMAD_root: percentage of CSC trees where the current partition is the root partition\n')
+print ('\nVoted_root: number of CSC trees where the current partition was the root partition\nMAD_root: percentage of CSC trees where the current partition was the root partition\n')
 a = a.drop(['Voted_root', 'MAD_root'], axis=1)
 b  = csc_root_candidates.merge(a, on=['Partition_id'], how = 'right').drop_duplicates(subset=['Tree', 'Partition_id'])
 b = b.drop(['Partition_id', 'Voted_root', 'MAD_root', 'Counts', 'consensus'],axis=1)
@@ -288,6 +288,7 @@ dict_worst_all = {k: f.groupby('Partition_id')['AD'].apply(float).to_dict() for 
 
 initial = len(dict_all)
 iter = 1
+tests = 0
 print ('Iteration\tRejected partition\tFDR-pvalue\t#trees')
 warnings.filterwarnings('ignore')
 pval_global = []
@@ -330,4 +331,3 @@ while len(dict_all)>1 and (initial > len(dict_all) or iter == 1):
 	pval_global += pvals
 print ('\nRetained partition(s): ' + str(list(dict_all.keys())))
 print ('\n**COMPLETED**\nRuntime: ' + str(datetime.now() - start_time))
-
