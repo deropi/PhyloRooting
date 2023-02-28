@@ -2,7 +2,7 @@
 
 Welcome to PhyloRooting repository! Here you will find the scripts to infer phylogenomic rooting neighborhood as described in https://doi.org/10.1101/758581. 
 
-The main analysis is done with pgroot.py. The input of the analysis is a concatenated file of rooted trees whose branch values represent AD (run MAD with -u flag). 
+The main analysis is done with pgroot.py. The input of the analysis is a concatenated file of rooted trees whose branch values represent AD. Get this formt by running MAD (mad.py) with -u flag. 
 
 Important! Sequence headers ***must follow the following format:***
 
